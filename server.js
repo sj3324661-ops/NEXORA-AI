@@ -6,6 +6,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// NEXORA AI Home
 app.get("/", (req, res) => {
     res.json({
         name: "NEXORA AI",
@@ -14,16 +15,26 @@ app.get("/", (req, res) => {
     });
 });
 
+// HTML कोड साफ करने का फंक्शन
+function cleanText(text) {
+    return text
+        .replace(/<[^>]*>/g, "")
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;|&#39;/g, "'")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">");
+}
+
+// Internet Search
 app.get("/search", async (req, res) => {
-
     try {
-
         const query = req.query.q;
 
         if (!query) {
             return res.status(400).json({
                 success: false,
-                error: "सवाल लिखना जरूरी है।"
+                error: "कृपया अपना सवाल लिखें।"
             });
         }
 
@@ -34,20 +45,20 @@ app.get("/search", async (req, res) => {
 
         const response = await fetch(url, {
             headers: {
-                "User-Agent": "NEXORA-AI/1.0 (personal learning project)"
+                "User-Agent": "NEXORA-AI/1.0"
             },
             signal: AbortSignal.timeout(15000)
         });
 
         if (!response.ok) {
-            throw new Error("Wikipedia HTTP Error: " + response.status);
+            throw new Error("Wikipedia Error: " + response.status);
         }
 
         const data = await response.json();
 
         const results = data.query.search.map(item => ({
-            title: item.title,
-            description: item.snippet.replace(/<[^>]*>/g, "")
+            title: cleanText(item.title),
+            description: cleanText(item.snippet)
         }));
 
         res.json({
@@ -56,18 +67,16 @@ app.get("/search", async (req, res) => {
         });
 
     } catch (error) {
-
         console.error("SEARCH ERROR:", error);
 
         res.status(500).json({
             success: false,
-            error: error.message
+            error: "इंटरनेट सर्च नहीं हो सकी।"
         });
-
     }
-
 });
 
+// Server Start
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
