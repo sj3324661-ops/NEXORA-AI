@@ -6,79 +6,137 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// NEXORA AI Home
 app.get("/", (req, res) => {
     res.json({
         name: "NEXORA AI",
         status: "Online",
-        message: "NEXORA AI चालू है!"
+        message: "Smart Search चालू है!"
     });
 });
 
-// HTML कोड साफ करने का फंक्शन
-function cleanText(text) {
-    return text
-        .replace(/<[^>]*>/g, "")
-        .replace(/&quot;/g, '"')
-        .replace(/&#039;|&#39;/g, "'")
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">");
-}
-
-// Internet Search
 app.get("/search", async (req, res) => {
-    try {
-        const query = req.query.q;
 
-        if (!query) {
+    try {
+
+        let question = req.query.q;
+
+        if (!question) {
             return res.status(400).json({
                 success: false,
-                error: "कृपया अपना सवाल लिखें।"
+                error: "सवाल लिखें।"
             });
         }
 
-        const url =
-            "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=" +
-            encodeURIComponent(query) +
-            "&format=json&utf8=1";
+        // सवाल को साफ करना
 
-        const response = await fetch(url, {
-            headers: {
-                "User-Agent": "NEXORA-AI/1.0"
-            },
-            signal: AbortSignal.timeout(15000)
+        question = question
+            .replace(/क्या है\??/gi, "")
+            .replace(/कौन है\??/gi, "")
+            .replace(/बताओ/gi, "")
+            .replace(/what is/gi, "")
+            .replace(/who is/gi, "")
+            .replace(/[?।!]/g, "")
+            .trim();
+
+        // हिंदी या English पहचानना
+
+        const isHindi = /[\u0900-\u097F]/.test(question);
+
+        const wiki = isHindi
+            ? "https://hi.wikipedia.org/w/api.php"
+            : "https://en.wikipedia.org/w/api.php";
+
+        // Wikipedia Search
+
+        const searchURL = new URL(wiki);
+
+        searchURL.search = new URLSearchParams({
+            action: "query",
+            list: "search",
+            srsearch: question,
+            srlimit: "5",
+            format: "json",
+            utf8: "1"
         });
 
-        if (!response.ok) {
-            throw new Error("Wikipedia Error: " + response.status);
+        const searchResponse = await fetch(searchURL, {
+            headers: {
+                "User-Agent": "NEXORA-AI/1.0"
+            }
+        });
+
+        const searchData = await searchResponse.json();
+
+        const results = searchData.query.search;
+
+        if (!results || results.length === 0) {
+            return res.json({
+                success: true,
+                results: []
+            });
         }
 
-        const data = await response.json();
+        // सही लेखों का विवरण लाना
 
-        const results = data.query.search.map(item => ({
-            title: cleanText(item.title),
-            description: cleanText(item.snippet)
-        }));
+        const pageIds = results
+            .map(item => item.pageid)
+            .join("|");
+
+        const detailURL = new URL(wiki);
+
+        detailURL.search = new URLSearchParams({
+            action: "query",
+            pageids: pageIds,
+            prop: "extracts",
+            exintro: "1",
+            explaintext: "1",
+            exchars: "700",
+            format: "json",
+            utf8: "1"
+        });
+
+        const detailResponse = await fetch(detailURL, {
+            headers: {
+                "User-Agent": "NEXORA-AI/1.0"
+            }
+        });
+
+        const detailData = await detailResponse.json();
+
+        const pages = detailData.query.pages;
+
+        const finalResults = results.map(item => {
+
+            const page = pages[item.pageid];
+
+            return {
+                title: item.title,
+                description: page?.extract || ""
+            };
+
+        });
 
         res.json({
             success: true,
-            results: results
+            language: isHindi ? "Hindi" : "English",
+            results: finalResults
         });
 
     } catch (error) {
-        console.error("SEARCH ERROR:", error);
+
+        console.log("SEARCH ERROR:", error);
 
         res.status(500).json({
             success: false,
-            error: "इंटरनेट सर्च नहीं हो सकी।"
+            error: "Search नहीं हो सकी।"
         });
+
     }
+
 });
 
-// Server Start
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log("NEXORA AI चालू है!");
+    console.log("NEXORA AI Smart Search चालू है!");
 });
